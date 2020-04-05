@@ -44,7 +44,16 @@ SAMPLES = samples_df.index.values.tolist()
 # get fastq file
 def get_fastq_file(wildcards):
     fastq_file = samples_df.loc[wildcards.sample,"fastq"]
+    if fastq_file.endswith(".gz"):
+        fastq_file = fastq_file.rstrip(".gz")
     return fastq_file
+
+# to trim or not to trim
+def get_trim_or_untrimmed(wildcards):
+    if config["trim"]:
+        return WORKING_DIR + "trimmed/{}.trimmed.fastq".format(wildcards.sample)
+    else:
+        return get_fastq_file(wildcards)
 
 # ShortStack parameters
 SHORTSTACK_PARAMS = " ".join(config["shortstack"].values())
@@ -68,7 +77,7 @@ rule all:
         SHORTSTACK_CONCAT,
         MIRNAS,
         HAIRPINS,
-        BLAST, 
+        BLAST,
         MFEs
     message:"All done! Removing intermediate files"
     shell:
@@ -78,14 +87,22 @@ rule all:
 # Rules
 #######
 
+##### GUNZIP ######
+
+rule gunzip_fastq:
+    input: "{sample}.fastq.gz"
+    output: temp("{sample}.fastq")
+    shell: "gunzip -c {input} > {output}"
+
+
 #########################
 # Folding of RNA hairpins
 #########################
 
-rule rna_fold: 
+rule rna_fold:
     input:
         hairpins = RES_DIR + "hairpins.fasta"
-    output: 
+    output:
         mfe = RES_DIR + "hairpins.mfe"
     message: "Calculate minimum free energy secondary structures of hairpins"
     conda:
@@ -102,9 +119,9 @@ rule rna_fold:
 # Produce a concatenated Shortstack dataframe
 #############################################
 
-rule extract_fasta_files_for_hairpins_and_mature_miRNAs_from_concatenated_shortstack: 
+rule extract_fasta_files_for_hairpins_and_mature_miRNAs_from_concatenated_shortstack:
     input:
-        RES_DIR + "concatenated_shortstacks.tsv" 
+        RES_DIR + "concatenated_shortstacks.tsv"
     output:
         hairpins = RES_DIR + "hairpins.fasta",
         mature = RES_DIR + "mature_mirnas.fasta"
@@ -120,16 +137,16 @@ rule concatenate_shorstacks_and_assign_unique_cluster_ids:
     output:
         RES_DIR + "concatenated_shortstacks.tsv"
     message: "Row-bind all Shortstacks and assign a unique id to each sRNA cluster"
-    run: 
+    run:
         dfs = [pd.read_csv(f,sep="\t") for f in input]
         df = pd.concat(dfs)
-        df["cluster_unique_id"] = ["cluster_" + str(i+1).zfill(10) for i in range(0,df.shape[0],1)]  
+        df["cluster_unique_id"] = ["cluster_" + str(i+1).zfill(10) for i in range(0,df.shape[0],1)]
         df.to_csv(output[0], sep="\t", index=False, header=True, na_rep = "NaN")
 
 
 rule add_sample_name_and_hairpin_seq_to_shortstack:
     input:
-        RES_DIR + "shortstack/{sample}/Results.txt", 
+        RES_DIR + "shortstack/{sample}/Results.txt",
         RES_DIR + "fasta/{sample}.hairpin.fasta"
     output:
         RES_DIR + "shortstack/{sample}/Results.with_sample_name_and_hairpins.tsv"
@@ -249,7 +266,7 @@ rule extract_mature_mirna_fasta_file_from_shortstack_file:
 
 rule shortstack:
     input:
-        reads =  WORKING_DIR + "trim/{sample}.trimmed.size.fastq"
+        reads =  get_trim_or_untrimmed
     output:
         RES_DIR + "shortstack/{sample}/Results.txt"
     message:"Shortstack analysis of {wildcards.sample} using {params.genome} reference"
@@ -275,7 +292,7 @@ rule shortstack:
 #############################
 rule keep_reads_shorter_than:
     input:
-        WORKING_DIR + "trimmed/{sample}.trimmed.fastq"
+        get_trim_or_untrimmed
     output:
         WORKING_DIR + "trim/{sample}.trimmed.size.fastq"
     message: "Discarding reads longer than {params.max_length} nucleotides"

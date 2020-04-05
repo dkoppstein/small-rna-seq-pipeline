@@ -36,10 +36,12 @@ shortstack:
 
 # small RNA lengths filtering
 length:
-  min_length: "18" # will keep everything longer than
-  max_length: "25" # will keep everything shorter than
+  min_length: "10" # will keep everything longer than
+  max_length: "80" # will keep everything shorter than
 
 # trimmomatic parameters
+trim: False
+
 trimmomatic:
   LeadMinTrimQual:        '10'       # Cut bases off the start of a read, if below threshold quality of
   TrailMinTrimQual:       '3'        # Cut bases off the end of a read, if below threshold quality of
